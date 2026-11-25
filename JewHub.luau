@@ -2584,9 +2584,7 @@ local function installFeaturePack(window, Rayfield, player, endpoints)
         label.TextWrapped=false label.RichText=false label.Size=UDim2.fromOffset(width,height)label.Position=UDim2.fromOffset(x,y)
         label.Parent=watermark return label
     end
-    local accent=Color3.fromRGB(235,151,178)
-    markText("WatermarkBrand","JewHub",12,9,82,20,15,Color3.fromRGB(244,244,248),Enum.Font.GothamMedium)
-    markText("WatermarkCaption","SANDBOX",12,28,82,10,9,accent)
+    markText("WatermarkBrand","JewHub",12,14,82,20,15,Color3.fromRGB(244,244,248),Enum.Font.GothamMedium)
     local divider=Instance.new("Frame")divider.BorderSizePixel=0 divider.BackgroundColor3=Color3.fromRGB(64,68,83)
     divider.Size=UDim2.fromOffset(1,24)divider.Position=UDim2.fromOffset(104,12)divider.Parent=watermark
     local muted=Color3.fromRGB(145,151,170)
