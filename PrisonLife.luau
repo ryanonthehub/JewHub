@@ -135,6 +135,7 @@ local schema={
     {"Combat","ignoreCriminals","Ignore criminals",false},
     {"Combat","autoShoot","Auto shoot acquired aim target",false},
     {"Combat","shotInterval","Auto shoot interval (s)",0.15,0.05,1,0.01},
+    {"Visuals","targetTracker","Live target tracker",true},
     {"Visuals","showFov","Show silent aim radius",false},
     {"Visuals","crosshair","Center dot crosshair",false},
     {"Visuals","espNames","Player names",true},
@@ -693,6 +694,7 @@ local function installPrisonCore(UI,tabs,adapter,visual,environment)
         end
         return chosen
     end
+    local lastSilentPart,lastSilentAt
     local castFunction,originalCast
     local function installSilent()
         if castFunction then return true end
@@ -706,7 +708,7 @@ local function installPrisonCore(UI,tabs,adapter,visual,environment)
             local args=table.pack(...)
             if alive and state.silent and not Input:GetFocusedTextBox()and typeof(args[1])=="Vector3"and typeof(args[2])=="Vector3"and math.random(1,100)<=state.hitChance then
                 local success,part=pcall(pickTarget,args[1],true)
-                if success and part then args[2]=part.Position end
+                if success and part then args[2]=part.Position lastSilentPart=part lastSilentAt=os.clock()end
             end
             return originalCast(table.unpack(args,1,args.n))
         end)
@@ -885,6 +887,15 @@ local function installPrisonCore(UI,tabs,adapter,visual,environment)
         for _,entry in restoreList do restore(entry[1],entry[2])end
     end
     return cleanup,{state=state,widgets=widgets,notify=notify,colorPicker=colorPicker,
+        getTracking=function()
+            if not alive or Input:GetFocusedTextBox()then return nil,"Idle"end
+            if state.silent and lastSilentPart and lastSilentPart.Parent and os.clock()-(lastSilentAt or 0)<0.3 then return lastSilentPart,"Silent shot"end
+            local locked=visual:getLockTarget()
+            if locked then return locked,"Aimlock"end
+            local camera=workspace.CurrentCamera
+            if state.silent and camera then return pickTarget(camera.CFrame.Position,false),"Silent candidate"end
+            return nil,"Idle"
+        end,
         getColor=function()return skinColor end,getGun=function()return selectedGun end,setGun=function(v)gun:SetValue(v)end}
 end
 
@@ -1003,6 +1014,94 @@ local function installPrisonMenu(UI,window)
 end
 
 
+local function installPrisonTracker(core,player)
+    local Players=game:GetService("Players")local Run=game:GetService("RunService")local Input=game:GetService("UserInputService")
+    local binding="JewHubTracker_"..game:GetService("HttpService"):GenerateGUID(false)
+    local gui=Instance.new("ScreenGui")gui.Name="JewHubLiveTracker"gui.IgnoreGuiInset=true gui.ResetOnSpawn=false gui.DisplayOrder=85 gui.Parent=player:WaitForChild("PlayerGui")
+    local function frame(name,parent,color)
+        local obj=Instance.new("Frame")obj.Name=name obj.BorderSizePixel=0 obj.BackgroundColor3=color obj.Parent=parent return obj
+    end
+    local dark=Color3.fromRGB(17,20,29)local accent=Color3.fromRGB(165,143,255)
+    local card=frame("TrackerCard",gui,dark)card.Size=UDim2.fromOffset(308,112)card.BackgroundTransparency=0.06 card.Active=true
+    local corner=Instance.new("UICorner")corner.CornerRadius=UDim.new(0,12)corner.Parent=card
+    local border=Instance.new("UIStroke")border.Color=Color3.fromRGB(74,78,101)border.Transparency=0.4 border.Thickness=1 border.Parent=card
+    local function label(name,text,x,y,width,height,size,color)
+        local obj=Instance.new("TextLabel")obj.Name=name obj.BackgroundTransparency=1 obj.Text=text obj.TextColor3=color
+        obj.Font=Enum.Font.GothamMedium obj.TextSize=size obj.TextXAlignment=Enum.TextXAlignment.Left
+        obj.TextWrapped=false obj.TextTruncate=Enum.TextTruncate.AtEnd obj.RichText=false
+        obj.Position=UDim2.fromOffset(x,y)obj.Size=UDim2.fromOffset(width,height)obj.Parent=card return obj
+    end
+    local muted=Color3.fromRGB(153,160,183)
+    label("TrackerTitle","LIVE TARGET",16,10,110,16,10,muted)
+    local mode=label("TrackerMode","IDLE",137,10,155,16,10,accent)mode.TextXAlignment=Enum.TextXAlignment.Right
+    local name=label("TrackerName","No target",16,32,276,22,16,Color3.fromRGB(240,242,250))
+    local detail=label("TrackerDetails","Enable Aimlock or Silent Aim",16,59,276,16,11,muted)
+    local healthText=label("TrackerHealth","",16,84,276,15,10,muted)healthText.TextXAlignment=Enum.TextXAlignment.Right
+    local track=frame("TrackerHealthTrack",card,Color3.fromRGB(44,49,65))track.Position=UDim2.fromOffset(16,89)track.Size=UDim2.fromOffset(190,5)
+    local fill=frame("TrackerHealthFill",track,accent)fill.Size=UDim2.fromScale(0,1)
+    for _,obj in {track,fill}do local radius=Instance.new("UICorner")radius.CornerRadius=UDim.new(1,0)radius.Parent=obj end
+    local camera=workspace.CurrentCamera
+    local viewport=camera and camera.ViewportSize or Vector2.new(800,600)
+    local position=Vector2.new(math.max(12,viewport.X-332),math.max(12,viewport.Y-150))
+    local function place()
+        camera=workspace.CurrentCamera if not camera then return end
+        viewport=camera.ViewportSize
+        position=Vector2.new(math.clamp(position.X,8,math.max(8,viewport.X-316)),math.clamp(position.Y,8,math.max(8,viewport.Y-120)))
+        card.Position=UDim2.fromOffset(position.X,position.Y)
+    end
+    place()
+    local dragInput,dragStart,dragPosition
+    local connections={}
+    table.insert(connections,card.InputBegan:Connect(function(input)
+        if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
+            dragInput=input dragStart=input.Position dragPosition=position
+        end
+    end))
+    table.insert(connections,Input.InputChanged:Connect(function(input)
+        if dragInput and(input.UserInputType==Enum.UserInputType.MouseMovement or input==dragInput)then
+            local delta=input.Position-dragStart position=dragPosition+Vector2.new(delta.X,delta.Y)place()
+        end
+    end))
+    table.insert(connections,Input.InputEnded:Connect(function(input)
+        if input==dragInput or input.UserInputType==Enum.UserInputType.MouseButton1 then dragInput=nil end
+    end))
+    local active,elapsed,part,trackingMode,ratio=true,0,nil,"Idle",nil
+    local function idle()
+        name.Text="No target"detail.Text="Enable Aimlock or Silent Aim"mode.Text="IDLE"healthText.Text=""track.Visible=false ratio=nil
+    end
+    Run:BindToRenderStep(binding,Enum.RenderPriority.Last.Value+8,function(dt)
+        if not active then return end
+        card.Visible=core.state.targetTracker
+        if not card.Visible then part=nil ratio=nil return end
+        place()elapsed+=dt
+        if elapsed>=0.1 then
+            elapsed=0 local ok,target,kind=pcall(core.getTracking)
+            if ok then if target~=part then ratio=nil end part,trackingMode=target,kind else part=nil end
+        end
+        local character=part and part.Parent
+        local targetPlayer=character and Players:GetPlayerFromCharacter(character)
+        local humanoid=character and character:FindFirstChildOfClass("Humanoid")
+        local root=character and character:FindFirstChild("HumanoidRootPart")
+        if not targetPlayer or not humanoid or humanoid.Health<=0 or not root then idle()return end
+        name.Text=targetPlayer.DisplayName or targetPlayer.Name
+        mode.Text=string.upper(trackingMode or "Tracking")
+        local origin=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        local distance=origin and string.format("%.0f studs",(origin.Position-root.Position).Magnitude)or ""
+        local tool=character:FindFirstChildOfClass("Tool")
+        detail.Text="@"..targetPlayer.Name.."  ·  "..distance..(tool and "  ·  "..tool.Name or "")
+        local fraction=math.clamp(humanoid.Health/math.max(1,humanoid.MaxHealth),0,1)
+        ratio=ratio and ratio+(fraction-ratio)*(1-math.exp(-math.max(0,dt)/0.12))or fraction
+        fill.Size=UDim2.fromScale(ratio,1)track.Visible=true
+        healthText.Text=string.format("%d / %d HP",math.ceil(humanoid.Health),math.ceil(humanoid.MaxHealth))
+        fill.BackgroundColor3=fraction<0.3 and Color3.fromRGB(248,126,139)or accent
+    end)
+    return function()
+        if not active then return end active=false
+        Run:UnbindFromRenderStep(binding)for _,c in connections do c:Disconnect()end gui:Destroy()
+    end
+end
+
+
 -- JewHub · Prison Life | WindUI edition
 -- Reference: https://github.com/Lutosys/opensrc/blob/main/PrisonlifeFullScript.lua
 -- Independent implementation. No telemetry or remote reference-script execution.
@@ -1018,10 +1117,11 @@ end)
 if not ok or type(NativeUI)~="table"then bootError(NativeUI)return end
 local UI,window,tabs,adapter=createWindAdapter(NativeUI)
 local player=game:GetService("Players").LocalPlayer
-local cleanupVisual,visual,cleanupCore,cleanupMenu
+local cleanupVisual,visual,cleanupCore,cleanupMenu,cleanupTracker
 local cleaned=false
 local function cleanup()
     if cleaned then return end cleaned=true
+    if cleanupTracker then cleanupTracker()end
     if cleanupMenu then cleanupMenu()end
     if cleanupCore then cleanupCore()end
     if cleanupVisual then cleanupVisual()end
@@ -1035,6 +1135,7 @@ local success,err=pcall(function()
     local autoload,config=installPrisonConfig(UI,tabs.Settings,core,visual,environment)
     tabs.Settings:AddButton({Title="Unload JewHub",Description="Restores modified properties and removes this menu.",Callback=cleanup})
     cleanupMenu=installPrisonMenu(UI,window)
+    cleanupTracker=installPrisonTracker(core,player)
     environment.__JewHubPrison={cleanup=cleanup,config=config}
     autoload()
     adapter:Notify({Title="JewHub · Prison Life",Content="Ready. Right Shift shows or hides the menu."})
