@@ -2,7 +2,7 @@ local function createFluentAdapter(Fluent)
     local camera=workspace.CurrentCamera
     local size=camera and camera.ViewportSize or Vector2.new(800,600)
     local window=Fluent:CreateWindow({Title="JewHub",SubTitle="Prison Life",TabWidth=150,
-        Size=UDim2.fromOffset(math.min(740,size.X-32),math.min(560,size.Y-48)),Acrylic=false,Theme="Dark",MinimizeKey=Enum.KeyCode.RightControl})
+        Size=UDim2.fromOffset(math.min(740,size.X-32),math.min(560,size.Y-48)),Acrylic=false,Theme="Dark",MinimizeKey=Enum.KeyCode.RightShift})
     local tabs={}
     for _,entry in {{"Home","home"},{"Combat","crosshair"},{"Visuals","eye"},{"Weapons","swords"},{"Player","user"},{"Travel","map-pin"},{"Settings","settings"}}do
         tabs[entry[1]]=window:AddTab({Title=entry[1],Icon=entry[2]})
@@ -655,7 +655,7 @@ local function installPrisonCore(Fluent,tabs,adapter,visual,environment)
     end
     local colorPicker=tabs.Weapons:AddColorpicker("PL_weaponTint",{Title="Weapon colour",Default=skinColor})
     colorPicker:OnChanged(function()skinColor=colorPicker.Value end)
-    tabs.Home:AddParagraph({Title="JewHub · Prison Life",Content="Fluent interface • Right Ctrl opens / minimizes the menu\nChoose a feature tab to get started. All gameplay modifications start disabled."})
+    tabs.Home:AddParagraph({Title="JewHub · Prison Life",Content="Fluent interface • Right Shift opens / minimizes the menu\nChoose a feature tab to get started. All gameplay modifications start disabled."})
     tabs.Home:AddParagraph({Title="Compatibility",Content="Built for the Prison Life version using gun Tool attributes and castRay. ESP and movement use standard Roblox APIs. Server rules still apply to shots, reloads and pickups."})
     tabs.Combat:AddParagraph({Title="Aim controls",Content="Aimlock moves the camera. Silent aim redirects the native castRay destination when supported. Larger smoothing values track more slowly. Auto shoot requires silent aim or an acquired aimlock target."})
     tabs.Weapons:AddParagraph({Title="Weapon support",Content="Uses existing SpreadRadius, AutoFire, ReloadTime and FireRate attributes. Colour/material changes are local previews. Server checks can limit these controls."})
@@ -839,7 +839,7 @@ local function installPrisonConfig(Fluent,tab,core,visual,environment)
         end)
         keybinds[flag]=bind
     end
-    local menuBind=tab:AddKeybind("PL_MenuKey",{Title="Show / hide menu",Default="RightControl",Mode="Toggle"})
+    local menuBind=tab:AddKeybind("PL_MenuKey",{Title="Show / hide menu",Default="RightShift",Mode="Toggle"})
     Fluent.MinimizeKeybind=menuBind keybinds.menu=menuBind
     local input=tab:AddInput("PL_profile",{Title="Config name",Default=profile,Placeholder="default",Finished=true,Callback=function(value)profile=value end})
     local function capture()
@@ -862,7 +862,10 @@ local function installPrisonConfig(Fluent,tab,core,visual,environment)
         return function()
             for key,value in pairs(settings)do core.widgets[key]:SetValue(value)end
             commitVisual()core.colorPicker:SetValueRGB(Color3.fromRGB(table.unpack(color)))core.setGun(saved.gun)
-            for flag,value in pairs(saved.keybinds)do keybinds[flag]:SetValue(value,"Toggle")end
+            for flag,value in pairs(saved.keybinds)do
+                if flag=="menu"and value=="RightControl"then value="RightShift"end
+                keybinds[flag]:SetValue(value,"Toggle")
+            end
         end
     end
     local function save(name)
@@ -934,6 +937,6 @@ local success,err=pcall(function()
     end
     environment.__JewHubPrison={cleanup=cleanup,config=config}
     autoload()
-    adapter:Notify({Title="JewHub · Prison Life",Content="Ready. Right Ctrl shows or hides the menu."})
+    adapter:Notify({Title="JewHub · Prison Life",Content="Ready. Right Shift shows or hides the menu."})
 end)
 if not success then bootError(err)cleanup()end
