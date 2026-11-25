@@ -1,5 +1,5 @@
--- Jew Hub: expanded from the user-supplied reference interfaces.
--- Connect the existing feature modules to Obsidian controls without changing their config keys.
+-- JewHub 
+-- Open Source For Skids :)
 local function createObsidianUI(library)
     local ui={library=library,destroyed=false,supportsKeybinds=true}
     local keybinds={}
