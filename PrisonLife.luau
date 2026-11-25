@@ -1,49 +1,124 @@
-local function createFluentAdapter(Fluent)
+local function createWindAdapter(WindUI)
     local camera=workspace.CurrentCamera
     local size=camera and camera.ViewportSize or Vector2.new(800,600)
-    local window=Fluent:CreateWindow({Title="JewHub",SubTitle="Prison Life",TabWidth=150,
-        Size=UDim2.fromOffset(math.min(740,size.X-32),math.min(560,size.Y-48)),Acrylic=false,Theme="Dark",MinimizeKey=Enum.KeyCode.RightShift})
-    local tabs={}
-    for _,entry in {{"Home","home"},{"Combat","crosshair"},{"Visuals","eye"},{"Weapons","swords"},{"Player","user"},{"Travel","map-pin"},{"Settings","settings"}}do
-        tabs[entry[1]]=window:AddTab({Title=entry[1],Icon=entry[2]})
+    local base=table.clone(WindUI:GetThemes().Dark)
+    local palettes={Dark={154,130,255},Darker={120,142,180},Aqua={65,203,218},Amethyst={190,125,255},Rose={235,139,172},Light={105,86,205}}
+    for name,rgb in pairs(palettes)do
+        local theme=table.clone(base)theme.Name=name
+        local light=name=="Light"
+        theme.Background=light and Color3.fromRGB(238,240,248)or Color3.fromRGB(15,17,24)
+        theme.Accent=light and Color3.fromRGB(250,251,255)or Color3.fromRGB(22,25,35)
+        theme.ElementBackground=light and Color3.fromRGB(224,228,239)or Color3.fromRGB(28,31,43)
+        theme.Text=light and Color3.fromRGB(27,30,42)or Color3.fromRGB(238,240,250)
+        theme.Icon=light and Color3.fromRGB(80,85,110)or Color3.fromRGB(164,171,194)
+        theme.Placeholder=theme.Icon
+        theme.Primary=Color3.fromRGB(table.unpack(rgb))theme.Toggle=theme.Primary theme.Slider=theme.Primary theme.Checkbox=theme.Primary
+        WindUI:AddTheme(theme)
     end
-    local routes={ESP="Visuals",Aimlock="Combat",Crosshair="Visuals",["Hit Feedback"]="Visuals"}
-    local options={}
+    local nativeWindow=WindUI:CreateWindow({Title="JewHub",Author="Prison Life",Icon="shield",Folder="JewHubPrisonUI",
+        Size=UDim2.fromOffset(math.min(740,size.X-32),math.min(560,size.Y-48)),MinSize=Vector2.new(400,320),
+        SideBarWidth=165,Theme="Dark",Transparent=false,Acrylic=false,Resizable=true,HideSearchBar=false,
+        ToggleKey=Enum.KeyCode.RightShift,IgnoreAlerts=true,
+        OpenButton={Title="JewHub",Icon="shield",OnlyMobile=false,Enabled=true}})
+    -- Our menu handler accepts Right Shift even if Roblox consumes the key.
+    nativeWindow:SetToggleKey(nil)
+    local destroyNative=nativeWindow.Destroy
+    nativeWindow.Destroy=function(self)self:Close()end
+    local UI={Options={},Unloaded=false}
+    function UI:SetTheme(value)WindUI:SetTheme(value)end
+    function UI:Notify(o)WindUI:Notify({Title=o.Title,Content=o.Content,Duration=o.Duration or 5,Icon="shield"})end
+    function UI:Destroy()
+        if self.Unloaded then return end self.Unloaded=true destroyNative(nativeWindow)
+    end
+    local window={native=nativeWindow}
+    function window:IsVisible()return not nativeWindow.Closed end
+    function window:SetVisible(visible)
+        if UI.Unloaded then return end
+        if visible and nativeWindow.Closed then nativeWindow:Open()elseif not visible and not nativeWindow.Closed then nativeWindow:Close()end
+    end
+    function window:Minimize()self:SetVisible(not self:IsVisible())end
+    local tabs={}
+    local function wrapTab(native)
+        local tab={}
+        local function control(kind,id,o)
+            local w={_value=o.Default,kind=kind}
+            local raw
+            local function publish(v)
+                if kind=="Slider"then v=tonumber(v)end
+                if w._value==v then return end
+                w._value=v
+                if o.Callback then o.Callback(v)end
+                if w.changed then w.changed(v)end
+            end
+            local common={Title=o.Title,Desc=o.Description,Callback=publish}
+            if kind=="Toggle"then common.Value=o.Default common.Type="Toggle"raw=native:Toggle(common)
+            elseif kind=="Slider"then common.Value={Min=o.Min,Max=o.Max,Default=o.Default}common.Step=o.Step or (o.Rounding==0 and 1 or 0.01)raw=native:Slider(common)
+            elseif kind=="Dropdown"then common.Values=o.Values common.Value=o.Default common.Multi=false common.AllowNone=true raw=native:Dropdown(common)
+            elseif kind=="Colorpicker"then common.Default=o.Default raw=native:Colorpicker(common)
+            elseif kind=="Input"then common.Value=o.Default common.Placeholder=o.Placeholder raw=native:Input(common)
+            elseif kind=="Keybind"then
+                common.Value=o.Default
+                common.Callback=function()if w.clicked then w.clicked()end end
+                raw=native:Keybind(common)
+            end
+            w.raw=raw
+            setmetatable(w,{__index=function(self,key)
+                if key=="Value"then return kind=="Keybind"and raw.Value or self._value end
+                if key=="Picking"then return raw.Picking end
+            end})
+            function w:SetValue(value)
+                if kind=="Dropdown"then raw:Select(value)else raw:Set(value)end
+                publish(value)
+            end
+            function w:SetValueRGB(value)self:SetValue(value)end
+            function w:SetValues(values)raw:Refresh(values)end
+            function w:OnChanged(callback)self.changed=callback callback(self.Value)end
+            function w:OnClick(callback)self.clicked=callback end
+            UI.Options[id]=w return w
+        end
+        for _,kind in {"Toggle","Slider","Dropdown","Colorpicker","Input","Keybind"}do
+            tab["Add"..kind]=function(_,id,o)return control(kind,id,o)end
+        end
+        function tab:AddParagraph(o)return native:Paragraph({Title=o.Title,Desc=o.Content})end
+        function tab:AddButton(o)return native:Button({Title=o.Title,Desc=o.Description,Callback=o.Callback})end
+        return tab
+    end
+    local natives={}
+    for _,entry in {{"Home","house"},{"Combat","crosshair"},{"Visuals","eye"},{"Weapons","swords"},{"Player","user"},{"Travel","map-pin"},{"Settings","settings"}}do
+        local native=nativeWindow:Tab({Title=entry[1],Icon=entry[2]})
+        natives[entry[1]]=native tabs[entry[1]]=wrapTab(native)
+    end
+    natives.Home:Select()
+    local routes={ESP="Visuals",Aimlock="Combat"}
     local serial=0
-    local function id(flag)serial+=1 return flag or "PL_control_"..serial end
     local adapter={}
     function adapter:CreateTab(name)
         local tab=assert(tabs[routes[name]or name],"Unknown menu tab: "..name)
+        local function id(flag)serial+=1 return flag or "PL_Control_"..serial end
         local out={}
         function out:CreateToggle(o)
-            local key=id(o.Flag)local w=tab:AddToggle(key,{Title=o.Name,Default=o.CurrentValue==true})
-            w:OnChanged(function(v)o.Callback(v)end)options[key]=w
+            local w=tab:AddToggle(id(o.Flag),{Title=o.Name,Default=o.CurrentValue})w:OnChanged(o.Callback)
             return{Set=function(_,v)w:SetValue(v)end}
         end
         function out:CreateSlider(o)
-            local step=o.Increment or 1
-            local w=tab:AddSlider(id(o.Flag),{Title=o.Name,Default=o.CurrentValue,Min=o.Range[1],Max=o.Range[2],Rounding=step<1 and 2 or 0,Callback=o.Callback})
+            local w=tab:AddSlider(id(o.Flag),{Title=o.Name,Default=o.CurrentValue,Min=o.Range[1],Max=o.Range[2],Step=o.Increment,Callback=o.Callback})
             return{Set=function(_,v)w:SetValue(v)end}
         end
         function out:CreateDropdown(o)
-            local key=id(o.Flag)local w=tab:AddDropdown(key,{Title=o.Name,Values=o.Options,Default=o.CurrentOption[1],Multi=false})
-            w:OnChanged(function(v)o.Callback({v})end)
+            local w=tab:AddDropdown(id(o.Flag),{Title=o.Name,Default=o.CurrentOption[1],Values=o.Options})w:OnChanged(function(v)o.Callback({v})end)
             return{Set=function(_,v)w:SetValue(type(v)=="table"and v[1]or v)end}
         end
         function out:CreateColorPicker(o)
-            local w=tab:AddColorpicker(id(o.Flag),{Title=o.Name,Default=o.Color})
-            w:OnChanged(function()o.Callback(w.Value)end)
+            local w=tab:AddColorpicker(id(o.Flag),{Title=o.Name,Default=o.Color})w:OnChanged(o.Callback)
             return{Set=function(_,v)w:SetValueRGB(v)end}
         end
         function out:CreateLabel(text)
-            local p=tab:AddParagraph({Title=name,Content=text})
-            return{Set=function(_,value)p:SetDesc(value)end}
+            local p=tab:AddParagraph({Title=name,Content=text})return{Set=function(_,v)p:SetDesc(v)end}
         end
         return out
     end
-    function adapter:Notify(o)Fluent:Notify({Title=o.Title or "JewHub",Content=o.Content or "",Duration=o.Duration or 5})end
-    window:SelectTab(1)
-    return window,tabs,adapter,options
+    function adapter:Notify(o)UI:Notify(o)end
+    return UI,window,tabs,adapter
 end
 
 
@@ -545,7 +620,7 @@ local function installVisualAim(window, Rayfield, player)
 end
 
 
-local function installPrisonCore(Fluent,tabs,adapter,visual,environment)
+local function installPrisonCore(UI,tabs,adapter,visual,environment)
     local Players=game:GetService("Players")local player=Players.LocalPlayer
     local Run=game:GetService("RunService")local Input=game:GetService("UserInputService")
     local Lighting=game:GetService("Lighting")local Http=game:GetService("HttpService")
@@ -642,20 +717,20 @@ local function installPrisonCore(Fluent,tabs,adapter,visual,environment)
         local tab,key,title,default=tabs[entry[1]],entry[2],entry[3],entry[4]
         local function change(v)
             state[key]=v
-            if key=="theme"then Fluent:SetTheme(v)end
+            if key=="theme"then UI:SetTheme(v)end
             if key=="silent"and v and not installSilent()then state.silent=false if widgets.silent then widgets.silent:SetValue(false)end end
         end
         if type(default)=="boolean"then
             widgets[key]=tab:AddToggle("PL_"..key,{Title=title,Default=default})widgets[key]:OnChanged(change)
         elseif type(default)=="number"then
-            widgets[key]=tab:AddSlider("PL_"..key,{Title=title,Default=default,Min=entry[5],Max=entry[6],Rounding=entry[7]<1 and 2 or 0,Callback=change})
+            widgets[key]=tab:AddSlider("PL_"..key,{Title=title,Default=default,Min=entry[5],Max=entry[6],Step=entry[7],Rounding=entry[7]<1 and 2 or 0,Callback=change})
         else
             widgets[key]=tab:AddDropdown("PL_"..key,{Title=title,Default=default,Values=entry[5],Multi=false})widgets[key]:OnChanged(change)
         end
     end
     local colorPicker=tabs.Weapons:AddColorpicker("PL_weaponTint",{Title="Weapon colour",Default=skinColor})
     colorPicker:OnChanged(function()skinColor=colorPicker.Value end)
-    tabs.Home:AddParagraph({Title="JewHub · Prison Life",Content="Fluent interface • Right Shift opens / minimizes the menu\nChoose a feature tab to get started. All gameplay modifications start disabled."})
+    tabs.Home:AddParagraph({Title="JewHub · Prison Life",Content="WindUI interface • Right Shift opens / minimizes the menu\nChoose a feature tab to get started. All gameplay modifications start disabled."})
     tabs.Home:AddParagraph({Title="Compatibility",Content="Built for the Prison Life version using gun Tool attributes and castRay. ESP and movement use standard Roblox APIs. Server rules still apply to shots, reloads and pickups."})
     tabs.Combat:AddParagraph({Title="Aim controls",Content="Aimlock moves the camera. Silent aim redirects the native castRay destination when supported. Larger smoothing values track more slowly. Auto shoot requires silent aim or an acquired aimlock target."})
     tabs.Weapons:AddParagraph({Title="Weapon support",Content="Uses existing SpreadRadius, AutoFire, ReloadTime and FireRate attributes. Colour/material changes are local previews. Server checks can limit these controls."})
@@ -814,7 +889,7 @@ local function installPrisonCore(Fluent,tabs,adapter,visual,environment)
 end
 
 
-local function installPrisonConfig(Fluent,tab,core,visual,environment)
+local function installPrisonConfig(UI,tab,core,visual,environment)
     local Http=game:GetService("HttpService")
     local fs=type(writefile)=="function"and type(readfile)=="function"and type(isfile)=="function"and type(makefolder)=="function"and type(isfolder)=="function"
     local folder="JewHub/PrisonLife"local profile="default"
@@ -834,13 +909,13 @@ local function installPrisonConfig(Fluent,tab,core,visual,environment)
         local name,flag=entry[1],entry[2]
         local bind=tab:AddKeybind("PL_Bind_"..flag,{Title=name.." keybind",Default="None",Mode="Toggle"})
         bind:OnClick(function()
-            local target=Fluent.Options[flag]
+            local target=UI.Options[flag]
             if target and not game:GetService("UserInputService"):GetFocusedTextBox()then target:SetValue(not target.Value)end
         end)
         keybinds[flag]=bind
     end
     local menuBind=tab:AddKeybind("PL_MenuKey",{Title="Show / hide menu",Default="RightShift",Mode="Toggle"})
-    Fluent.MinimizeKeybind=menuBind keybinds.menu=menuBind
+    keybinds.menu=menuBind
     local input=tab:AddInput("PL_profile",{Title="Config name",Default=profile,Placeholder="default",Finished=true,Callback=function(value)profile=value end})
     local function capture()
         local keys={}for flag,bind in pairs(keybinds)do keys[flag]=keyName(bind.Value)end
@@ -900,41 +975,66 @@ local function installPrisonConfig(Fluent,tab,core,visual,environment)
 end
 
 
--- JewHub · Prison Life | Fluent edition
+local function installPrisonMenu(UI,window)
+    local Input=game:GetService("UserInputService")
+    local originalDestroy=UI.Destroy
+    local alive=true
+    -- One owner for menu input prevents the library and our handler toggling twice.
+    local function setVisible(value)
+        if not alive or UI.Unloaded then return end
+        window:SetVisible(value)
+    end
+    window.Minimize=function()setVisible(not window:IsVisible())end
+    UI.Destroy=function()setVisible(false)end
+    local connection=Input.InputBegan:Connect(function(input)
+        if not alive or Input:GetFocusedTextBox()then return end
+        for _,option in pairs(UI.Options)do if option.kind=="Keybind"and option.Picking then return end end
+        local custom=UI.Options.PL_MenuKey
+        local selected=custom and custom.Value
+        -- Right Shift always works, even when a saved profile uses another key.
+        if input.KeyCode==Enum.KeyCode.RightShift or(selected and input.KeyCode.Name==selected)then
+            setVisible(not window:IsVisible())
+        end
+    end)
+    return function()
+        if not alive then return end alive=false connection:Disconnect()
+        UI.Destroy=originalDestroy
+    end
+end
+
+
+-- JewHub · Prison Life | WindUI edition
 -- Reference: https://github.com/Lutosys/opensrc/blob/main/PrisonlifeFullScript.lua
 -- Independent implementation. No telemetry or remote reference-script execution.
 if not game:IsLoaded()then game.Loaded:Wait()end
 local environment=type(getgenv)=="function"and getgenv()or _G
 if environment.__JewHubPrison then pcall(environment.__JewHubPrison.cleanup)end
 local function bootError(message)warn("[JewHub Prison Life] "..tostring(message))end
-local ok,Fluent=pcall(function()
+local ok,NativeUI=pcall(function()
     assert(type(loadstring)=="function","This version needs an executor with loadstring and HTTP support.")
-    local source=game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/download/1.1.0/main.lua")
+    local source=game:HttpGet("https://github.com/Footagesus/WindUI/releases/download/1.6.66/main.lua")
     local chunk,err=loadstring(source)assert(chunk,err)return chunk()
 end)
-if not ok or type(Fluent)~="table"then bootError(Fluent)return end
-local window,tabs,adapter,options=createFluentAdapter(Fluent)
+if not ok or type(NativeUI)~="table"then bootError(NativeUI)return end
+local UI,window,tabs,adapter=createWindAdapter(NativeUI)
 local player=game:GetService("Players").LocalPlayer
-local cleanupVisual,visual,cleanupCore,cleanupConfig
+local cleanupVisual,visual,cleanupCore,cleanupMenu
 local cleaned=false
 local function cleanup()
     if cleaned then return end cleaned=true
+    if cleanupMenu then cleanupMenu()end
     if cleanupCore then cleanupCore()end
     if cleanupVisual then cleanupVisual()end
-    if not Fluent.Unloaded then Fluent:Destroy()end
+    if not UI.Unloaded then UI:Destroy()end
     if environment.__JewHubPrison and environment.__JewHubPrison.cleanup==cleanup then environment.__JewHubPrison=nil end
 end
 local success,err=pcall(function()
     cleanupVisual,visual=installVisualAim(adapter,adapter,player)
     local core
-    cleanupCore,core=installPrisonCore(Fluent,tabs,adapter,visual,environment)
-    local autoload,config=installPrisonConfig(Fluent,tabs.Settings,core,visual,environment)
+    cleanupCore,core=installPrisonCore(UI,tabs,adapter,visual,environment)
+    local autoload,config=installPrisonConfig(UI,tabs.Settings,core,visual,environment)
     tabs.Settings:AddButton({Title="Unload JewHub",Description="Restores modified properties and removes this menu.",Callback=cleanup})
-    -- Fluent's built-in close control must use the same cleanup path.
-    local destroy=Fluent.Destroy
-    Fluent.Destroy=function(self)
-        if not cleaned then cleanup()else destroy(self)end
-    end
+    cleanupMenu=installPrisonMenu(UI,window)
     environment.__JewHubPrison={cleanup=cleanup,config=config}
     autoload()
     adapter:Notify({Title="JewHub · Prison Life",Content="Ready. Right Shift shows or hides the menu."})
