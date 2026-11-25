@@ -2572,8 +2572,31 @@ local function installFeaturePack(window, Rayfield, player, endpoints)
     end)
     local hud=Instance.new("TextLabel") hud.Size=UDim2.fromOffset(350,50) hud.Position=UDim2.new(0.5,-175,1,-100)
     hud.BackgroundColor3=Color3.fromRGB(20,20,28) hud.TextColor3=Color3.new(1,1,1) hud.TextSize=15 hud.TextWrapped=true hud.Visible=false hud.Parent=rootGui
-    local watermark=Instance.new("TextLabel") watermark.Size=UDim2.fromOffset(340,24) watermark.Position=UDim2.new(1,-350,0,8)
-    watermark.BackgroundColor3=Color3.fromRGB(20,20,28) watermark.TextColor3=Color3.fromRGB(226,120,152) watermark.TextSize=13 watermark.Parent=rootGui
+    local watermark=Instance.new("Frame")watermark.Name="JewHubWatermark"
+    watermark.AnchorPoint=Vector2.new(1,0)watermark.Size=UDim2.fromOffset(336,48)watermark.Position=UDim2.new(1,-16,0,16)
+    watermark.BackgroundColor3=Color3.fromRGB(17,19,26)watermark.BackgroundTransparency=0.08 watermark.BorderSizePixel=0 watermark.Parent=rootGui
+    local rounding=Instance.new("UICorner")rounding.CornerRadius=UDim.new(0,12)rounding.Parent=watermark
+    local border=Instance.new("UIStroke")border.Color=Color3.fromRGB(75,79,96)border.Transparency=0.5 border.Thickness=1 border.Parent=watermark
+    local watermarkScale=Instance.new("UIScale")watermarkScale.Parent=watermark
+    local function markText(name,text,x,y,width,height,size,color,font)
+        local label=Instance.new("TextLabel")label.Name=name label.Text=text label.Font=font or Enum.Font.Gotham
+        label.TextSize=size label.TextColor3=color label.BackgroundTransparency=1 label.BorderSizePixel=0
+        label.TextWrapped=false label.RichText=false label.Size=UDim2.fromOffset(width,height)label.Position=UDim2.fromOffset(x,y)
+        label.Parent=watermark return label
+    end
+    local accent=Color3.fromRGB(235,151,178)
+    markText("WatermarkBrand","JewHub",12,9,82,20,15,Color3.fromRGB(244,244,248),Enum.Font.GothamMedium)
+    markText("WatermarkCaption","SANDBOX",12,28,82,10,9,accent)
+    local divider=Instance.new("Frame")divider.BorderSizePixel=0 divider.BackgroundColor3=Color3.fromRGB(64,68,83)
+    divider.Size=UDim2.fromOffset(1,24)divider.Position=UDim2.fromOffset(104,12)divider.Parent=watermark
+    local muted=Color3.fromRGB(145,151,170)
+    local valueColor=Color3.fromRGB(232,235,244)
+    local fpsText=markText("WatermarkFPS","—",114,7,66,20,14,valueColor,Enum.Font.GothamMedium)
+    local pingText=markText("WatermarkPing","—",186,7,66,20,14,valueColor,Enum.Font.GothamMedium)
+    local countText=markText("WatermarkPlayers",tostring(#Players:GetPlayers()),258,7,66,20,14,valueColor,Enum.Font.GothamMedium)
+    markText("WatermarkFPSLabel","FPS",114,28,66,12,9,muted)
+    markText("WatermarkPingLabel","PING · MS",186,28,66,12,9,muted)
+    markText("WatermarkPlayersLabel","PLAYERS",258,28,66,12,9,muted)
     local fpsFrames,fpsAt=0,os.clock()
     local pathFolder=Instance.new("Folder") pathFolder.Name="JewHubTargetPath" pathFolder.Parent=workspace owned[pathFolder]=true
     local lines,arrows={},{}
@@ -3003,11 +3026,15 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ryanonthehub/JewHub/r
             if not camera then return end
             local time=os.clock()
             watermark.Visible=state.watermark
+            watermarkScale.Scale=math.min(1,math.max(0.1,(camera.ViewportSize.X-32)/336))
             fpsFrames+=1
             if time-fpsAt>=0.5 then
                 local ping="n/a"
                 if type(player.GetNetworkPing)=="function" then local ok,value=pcall(function()return player:GetNetworkPing()end) if ok then ping=tostring(math.floor(value*1000+0.5)) end end
-                watermark.Text=string.format("Jew Hub | %d FPS | %s ms | %d players",math.floor(fpsFrames/(time-fpsAt)+0.5),ping,#Players:GetPlayers())
+                local fps=math.floor(fpsFrames/(time-fpsAt)+0.5)
+                fpsText.Text=tostring(fps)pingText.Text=ping=="n/a"and "—"or ping countText.Text=tostring(#Players:GetPlayers())
+                fpsText.TextColor3=fps<30 and Color3.fromRGB(245,185,112)or valueColor
+                pingText.TextColor3=(tonumber(ping)or 0)>150 and Color3.fromRGB(245,185,112)or valueColor
                 fpsFrames=0 fpsAt=time
             end
             if root and humanoid and humanoid.Health>0 then
