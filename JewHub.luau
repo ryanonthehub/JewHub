@@ -1250,14 +1250,22 @@ local function installVisualAim(window, Rayfield, player)
         tracer.BackgroundColor3 = tint
         tracer.Visible = false
         tracer.Parent = gui
-        local info=Instance.new("TextLabel") info.Name="PlayerInfo" info.BackgroundTransparency=1 info.TextColor3=tint
-        info.TextSize=13 info.TextWrapped=true info.Size=UDim2.fromOffset(220,48) info.Visible=false info.Parent=gui
+        local function label(name,font,color)
+            local text=Instance.new("TextLabel")text.Name=name text.BackgroundTransparency=1
+            text.Font=font text.TextColor3=color text.TextStrokeColor3=Color3.fromRGB(0,0,0)text.TextStrokeTransparency=0.25
+            text.TextSize=13 text.TextWrapped=false text.TextScaled=false text.RichText=false
+            text.TextTruncate=Enum.TextTruncate.AtEnd text.AnchorPoint=Vector2.new(0.5,0)
+            text.Size=UDim2.fromOffset(240,18)text.Visible=false text.Parent=gui return text
+        end
+        local info=label("PlayerInfo",Enum.Font.GothamMedium,tint)
+        local details=label("PlayerDetails",Enum.Font.Gotham,Color3.fromRGB(235,235,240))
+        local weapon=label("PlayerWeapon",Enum.Font.Gotham,Color3.fromRGB(200,204,214))
         local health=Instance.new("Frame") health.BorderSizePixel=0 health.BackgroundColor3=Color3.fromRGB(25,25,25) health.Visible=false health.Parent=gui
         local healthFill=Instance.new("Frame") healthFill.BorderSizePixel=0 healthFill.BackgroundColor3=Color3.fromRGB(60,255,100) healthFill.Parent=health
         local dot=Instance.new("Frame") dot.BorderSizePixel=0 dot.BackgroundColor3=tint dot.Size=UDim2.fromOffset(7,7) dot.AnchorPoint=Vector2.new(0.5,0.5) dot.Visible=false dot.Parent=gui
         local dotCorner=Instance.new("UICorner") dotCorner.CornerRadius=UDim.new(1,0) dotCorner.Parent=dot
-        local actor = { box = box, outline = outline, tracer = tracer, info=info,health=health,healthFill=healthFill,dot=dot,
-            skeleton={},skeletonOutlines={},extras={info,health,dot} }
+        local actor = { box = box, outline = outline, tracer = tracer, info=info,details=details,weapon=weapon,health=health,healthFill=healthFill,dot=dot,
+            skeleton={},skeletonOutlines={},extras={info,details,weapon,health,dot} }
         actors[other] = actor
         return actor
     end
@@ -1322,21 +1330,30 @@ local function installVisualAim(window, Rayfield, player)
         actor.box.Visible = state.boxes or state.fill
         if extras then
             local text={}
+            actor.info.Text=""
             if extras.espNames then
                 local display=other.DisplayName or other.Name
                 local mode=extras.espNameType
                 local name=mode=="Username" and other.Name or display
                 if mode=="Both" and display~=other.Name then name=display.." (@"..other.Name..")" end
-                table.insert(text,name)
+                actor.info.Text=name
             end
             if extras.espDistance then table.insert(text,string.format("%.0f studs",(root.Position-camera.CFrame.Position).Magnitude)) end
             if extras.espHealthText then table.insert(text,string.format("%d HP",math.ceil(humanoid.Health))) end
-            if extras.espWeapon then
-                local name=featurePack:getWeaponName(other)
-                if name then table.insert(text,name) end
-            end
-            actor.info.TextSize=extras.espTextSize or 13
-            actor.info.Text=table.concat(text," | ") actor.info.Position=UDim2.fromOffset((left+right)/2-110,top-48) actor.info.Visible=#text>0
+            local size=extras.espTextSize or 13
+            local detailSize=math.max(10,size-2)
+            local rowHeight=size+5
+            local center=(left+right)/2
+            actor.info.TextSize=size actor.info.Size=UDim2.fromOffset(240,rowHeight)
+            actor.info.Position=UDim2.fromOffset(center,top-rowHeight-3)actor.info.Visible=extras.espNames
+            actor.details.Text=table.concat(text,"  ·  ")actor.details.TextSize=detailSize
+            actor.details.Size=UDim2.fromOffset(240,rowHeight)actor.details.Position=UDim2.fromOffset(center,bottom+3)
+            actor.details.Visible=#text>0
+            local weapon=extras.espWeapon and featurePack:getWeaponName(other)or nil
+            actor.weapon.Text=weapon or "" actor.weapon.TextSize=detailSize
+            actor.weapon.Size=UDim2.fromOffset(240,rowHeight)
+            actor.weapon.Position=UDim2.fromOffset(center,bottom+3+(#text>0 and rowHeight or 0))
+            actor.weapon.Visible=weapon~=nil and weapon~=""
             actor.health.Position=UDim2.fromOffset(left-7,top) actor.health.Size=UDim2.fromOffset(4,math.max(1,bottom-top))
             local fraction=math.clamp(humanoid.Health/math.max(1,humanoid.MaxHealth),0,1)
             local response=extras.espHealthSmooth or 0
