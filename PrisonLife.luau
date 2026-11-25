@@ -732,7 +732,7 @@ local function installPrisonCore(UI,tabs,adapter,visual,environment)
     end
     local colorPicker=tabs.Weapons:AddColorpicker("PL_weaponTint",{Title="Weapon colour",Default=skinColor})
     colorPicker:OnChanged(function()skinColor=colorPicker.Value end)
-    tabs.Home:AddParagraph({Title="JewHub · Prison Life",Content="WindUI interface • Right Shift opens / minimizes the menu\nChoose a feature tab to get started. All gameplay modifications start disabled."})
+    tabs.Home:AddParagraph({Title="JewHub · Prison Life",Content="Prison Life Script Is Here!"})
     tabs.Home:AddParagraph({Title="Compatibility",Content="Built for the Prison Life version using gun Tool attributes and castRay. ESP and movement use standard Roblox APIs. Server rules still apply to shots, reloads and pickups."})
     tabs.Combat:AddParagraph({Title="Aim controls",Content="Aimlock moves the camera. Silent aim redirects the native castRay destination when supported. Larger smoothing values track more slowly. Auto shoot requires silent aim or an acquired aimlock target."})
     tabs.Weapons:AddParagraph({Title="Weapon support",Content="Uses existing SpreadRadius, AutoFire, ReloadTime and FireRate attributes. Colour/material changes are local previews. Server checks can limit these controls."})
